@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MCP AI Agent — Task Injector</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #222638;
+    --border: #2e3250;
+    --blue: #4f8ef7;
+    --blue-dim: #1e3a6e;
+    --green: #22c55e;
+    --green-dim: #14532d;
+    --yellow: #f59e0b;
+    --red: #ef4444;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --radius: 10px;
+    --mono: 'Fira Code', 'Courier New', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; }
+
+  .header {
+    background: linear-gradient(135deg, #1a1d27 0%, #1e2540 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 32px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .header-icon { font-size: 32px; }
+  .header h1 { font-size: 22px; font-weight: 700; color: var(--text); }
+  .header p  { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .badge {
+    margin-left: auto;
+    background: var(--blue-dim); color: var(--blue);
+    border: 1px solid var(--blue); border-radius: 20px;
+    padding: 4px 12px; font-size: 12px; font-weight: 600;
+  }
+
+  .main { display: grid; grid-template-columns: 340px 1fr; gap: 0; height: calc(100vh - 81px); }
+
+  /* ── LEFT PANEL ── */
+  .panel-left {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 24px;
+    overflow-y: auto;
+    display: flex; flex-direction: column; gap: 20px;
+  }
+
+  .card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+  .card-title {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 12px;
+  }
+
+  label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px; margin-top: 10px; }
+  label:first-of-type { margin-top: 0; }
+  input, select, textarea {
+    width: 100%; padding: 8px 12px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-size: 13px;
+    outline: none; transition: border 0.2s;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--blue); }
+  select option { background: var(--surface); }
+
+  .tool-list { display: flex; flex-direction: column; gap: 6px; }
+  .tool-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; font-size: 12px;
+  }
+  .tool-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .tool-dot.ok  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .tool-dot.run { background: var(--yellow); animation: pulse 1s infinite; }
+  .tool-dot.err { background: var(--red); }
+  .tool-name { font-family: var(--mono); color: var(--blue); flex: 1; }
+  .tool-status { color: var(--muted); font-size: 11px; }
+
+  .btn {
+    width: 100%; padding: 12px;
+    border: none; border-radius: 8px; cursor: pointer;
+    font-size: 14px; font-weight: 600; transition: all 0.2s;
+  }
+  .btn-primary { background: var(--blue); color: white; }
+  .btn-primary:hover:not(:disabled) { background: #6b9ff8; transform: translateY(-1px); }
+  .btn-primary:disabled { background: var(--blue-dim); color: var(--muted); cursor: not-allowed; }
+  .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); font-size: 12px; padding: 8px; margin-top: 6px; }
+  .btn-ghost:hover { color: var(--text); border-color: var(--text); }
+
+  .progress-bar { background: var(--bg); border-radius: 4px; height: 6px; overflow: hidden; margin-top: 8px; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--blue), #7c3aed); border-radius: 4px; transition: width 0.4s ease; }
+
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat-box {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px; text-align: center;
+  }
+  .stat-val { font-size: 22px; font-weight: 700; color: var(--blue); }
+  .stat-label { font-size: 10px; color: var(--muted); margin-top: 2px; text-transform: uppercase; }
+  .stat-box.green .stat-val { color: var(--green); }
+  .stat-box.red   .stat-val { color: var(--red); }
+
+  /* ── RIGHT PANEL ── */
+  .panel-right {
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+
+  .tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .tab {
+    padding: 12px 20px; font-size: 13px; font-weight: 500;
+    cursor: pointer; border-bottom: 2px solid transparent;
+    color: var(--muted); transition: all 0.2s;
+  }
+  .tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  .tab-content { flex: 1; overflow-y: auto; display: none; padding: 24px; }
+  .tab-content.active { display: block; }
+
+  /* Log */
+  .log {
+    background: #0a0c12; border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px;
+    font-family: var(--mono); font-size: 12px;
+    height: calc(100vh - 200px); overflow-y: auto;
+    line-height: 1.8;
+  }
+  .log-entry { display: flex; gap: 12px; margin-bottom: 2px; }
+  .log-time  { color: var(--muted); flex-shrink: 0; }
+  .log-text  { color: var(--text); }
+  .log-text.info    { color: var(--text); }
+  .log-text.success { color: var(--green); }
+  .log-text.step    { color: var(--blue); font-weight: 700; }
+  .log-text.warn    { color: var(--yellow); }
+  .log-text.error   { color: var(--red); }
+  .log-text.data    { color: #a78bfa; }
+  .log-text.muted   { color: var(--muted); }
+
+  /* Summary chart */
+  .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .chart-card { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+  .chart-title { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .bar-label { width: 100px; font-size: 12px; color: var(--text); font-family: var(--mono); flex-shrink: 0; }
+  .bar-track { flex: 1; background: var(--bg); border-radius: 4px; height: 20px; overflow: hidden; }
+  .bar-fill  { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 8px;
+               font-size: 11px; font-weight: 600; color: white; transition: width 1s ease; min-width: 30px; }
+  .bar-count { width: 45px; text-align: right; font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+  /* Schema viewer */
+  .schema-tree { background: #0a0c12; border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; font-family: var(--mono); font-size: 13px; line-height: 2; }
+  .sk-key   { color: #7dd3fc; }
+  .sk-type  { color: #86efac; }
+  .sk-enum  { color: #fde68a; }
+  .sk-req   { color: #f87171; font-size: 11px; }
+  .sk-str   { color: #a78bfa; }
+
+  /* Claude output */
+  .ai-bubble {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px; margin-bottom: 16px;
+    font-size: 13px; line-height: 1.7; color: var(--text);
+    white-space: pre-wrap;
+  }
+  .ai-bubble .ai-label { font-size: 11px; color: var(--blue); font-weight: 700; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">🤖</div>
+  <div>
+    <h1>MCP AI Agent — Task Injector</h1>
+    <p>Agent that inspects schema, generates & inserts 1000 tasks</p>
+  </div>
+  <div class="badge">MCP 2025-06-18</div>
+</div>
+
+<div class="main">
+
+  <!-- LEFT PANEL -->
+  <div class="panel-left">
+
+    <div class="card">
+      <div class="card-title">⚙️ Configuration</div>
+      <label>MCP Server URL</label>
+      <input id="serverUrl" value="http://localhost:8081" placeholder="http://localhost:8081"/>
+      <label>Number of Tasks to Insert</label>
+      <input id="taskCount" type="number" value="1000" min="1" max="1000"/>
+      <label>Batch Size</label>
+      <select id="batchSize">
+        <option value="1000">1000 (single request)</option>
+        <option value="500">500 per batch (2 requests)</option>
+        <option value="250">250 per batch (4 requests)</option>
+        <option value="100">100 per batch (10 requests)</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🔧 MCP Tools Status</div>
+      <div class="tool-list" id="toolList">
+        <div class="tool-item"><div class="tool-dot" id="dot-help"></div><div class="tool-name">mcp-help</div><div class="tool-status" id="st-help">idle</div></div>
+        <div class="tool-item"><div class="tool-dot" id="dot-schema"></div><div class="tool-name">mcp-schema-tasks</div><div class="tool-status" id="st-schema">idle</div></div>
+        <div class="tool-item"><div class="tool-dot" id="dot-insert"></div><div class="tool-name">mcp-tasks</div><div class="tool-status" id="st-insert">idle</div></div>
+        <div class="tool-item"><div class="tool-dot" id="dot-summary"></div><div class="tool-name">mcp-tasks-summary</div><div class="tool-status" id="st-summary">idle</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📊 Run Stats</div>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="stat-val" id="s-requested">—</div><div class="stat-label">Requested</div></div>
+        <div class="stat-box green"><div class="stat-val" id="s-inserted">—</div><div class="stat-label">Inserted</div></div>
+        <div class="stat-box red"><div class="stat-val" id="s-failed">—</div><div class="stat-label">Failed</div></div>
+        <div class="stat-box"><div class="stat-val" id="s-total">—</div><div class="stat-label">Total in DB</div></div>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+      <div style="text-align:center;font-size:11px;color:var(--muted);margin-top:6px" id="progressLabel">Not started</div>
+    </div>
+
+    <button class="btn btn-primary" id="runBtn" onclick="runAgent()">▶ Run AI Agent</button>
+    <button class="btn btn-ghost" onclick="resetAll()">↺ Reset</button>
+
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="panel-right">
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('log')">📋 Agent Log</div>
+      <div class="tab" onclick="switchTab('schema')">🗂 Schema</div>
+      <div class="tab" onclick="switchTab('summary')">📊 Summary</div>
+      <div class="tab" onclick="switchTab('prompt')">💬 Prompt</div>
+    </div>
+
+    <div id="tab-log" class="tab-content active">
+      <div class="log" id="logBox">
+        <div class="log-entry"><div class="log-text muted">Ready. Click "Run AI Agent" to start.</div></div>
+      </div>
+    </div>
+
+    <div id="tab-schema" class="tab-content">
+      <div id="schemaBox" style="color:var(--muted);font-size:13px;padding:20px 0">Schema will appear after the agent runs Step 1.</div>
+    </div>
+
+    <div id="tab-summary" class="tab-content">
+      <div id="summaryBox" style="color:var(--muted);font-size:13px;padding:20px 0">Summary will appear after the agent inserts tasks.</div>
+    </div>
+
+    <div id="tab-prompt" class="tab-content">
+      <div class="ai-bubble">
+        <div class="ai-label">📝 The Prompt Used With the Agent</div>
+"Please inspect the task schema at /mcp/schema/tasks. Then generate and insert 1000 diverse tasks with random statuses, titles, and due dates using the /mcp/tasks endpoint."
+
+<b style="color:var(--blue)">What the agent does with this prompt:</b>
+
+1. STEP 1 — Calls GET /mcp/help to discover all available tools
+2. STEP 2 — Calls GET /mcp/schema/tasks to understand:
+   • Required fields: title, status
+   • Valid statuses: TODO, IN_PROGRESS, DONE, CANCELLED, BLOCKED
+   • Valid priorities: LOW, MEDIUM, HIGH, CRITICAL
+   • Optional fields: description, priority, dueDate, assignedTo, category
+
+3. STEP 3 — Generates 1000 diverse tasks:
+   • Randomises status using weighted distribution
+   • Uses 40+ realistic software engineering titles
+   • Assigns to team members: alice, bob, carol, dave, eve, frank
+   • Uses categories: Backend, Frontend, DevOps, QA, Security, Database
+   • Sets due dates spread across the next 6 months
+   • Adds realistic descriptions for ~70% of tasks
+
+4. STEP 4 — POSTs all tasks to /mcp/tasks in batches
+
+5. STEP 5 — Calls GET /mcp/tasks/summary to validate:
+   • Confirms totalTasks matches what was inserted
+   • Shows breakdown by status, priority, category, assignee
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Data pools ────────────────────────────────────────────────────────────────
+const TITLES = [
+  "Implement login page","Fix null pointer exception","Write unit tests",
+  "Update API documentation","Deploy to staging","Review pull request",
+  "Refactor database queries","Add pagination support","Set up CI/CD pipeline",
+  "Optimize image loading","Create onboarding flow","Fix broken links",
+  "Migrate to PostgreSQL","Add dark mode","Write integration tests",
+  "Update dependencies","Fix memory leak","Implement caching layer",
+  "Add search functionality","Create dashboard widget","Resolve merge conflicts",
+  "Setup monitoring alerts","Write release notes","Improve error messages",
+  "Add input validation","Implement OAuth2","Add rate limiting",
+  "Setup log aggregation","Implement retry logic","Design database schema",
+  "Add feature flags","Update test coverage","Fix CORS issues",
+  "Implement file upload","Create REST endpoint","Add audit logging",
+  "Setup load balancer","Performance profiling","Security audit",
+  "Code review sprint items","Fix regression bug","Containerize service",
+];
+const DESCRIPTIONS = [
+  "This task requires careful implementation following existing patterns.",
+  "High priority item from the last sprint retrospective.",
+  "Related to customer feedback from Q3 survey.",
+  "Part of the tech debt reduction initiative.",
+  "Required for the upcoming product launch.",
+  "Estimated effort: 3 story points.",
+  "Needs UX review before implementation starts.",
+  "Dependency for three other open tasks.",
+  "Regression found in latest build — needs hotfix.",
+  null, null, null,
+];
+const STATUSES   = ["TODO","IN_PROGRESS","DONE","CANCELLED","BLOCKED"];
+const SW         = [0.35, 0.25, 0.25, 0.08, 0.07];
+const PRIORITIES = ["LOW","MEDIUM","HIGH","CRITICAL"];
+const PW         = [0.20, 0.40, 0.30, 0.10];
+const CATEGORIES = ["Backend","Frontend","DevOps","QA","Security","Database","Documentation","Design"];
+const ASSIGNEES  = ["alice","bob","carol","dave","eve","frank","grace","henry",null,null];
+
+function weightedRandom(items, weights) {
+  const r = Math.random();
+  let cum = 0;
+  for (let i = 0; i < items.length; i++) { cum += weights[i]; if (r < cum) return items[i]; }
+  return items[items.length-1];
+}
+function randFrom(arr) { return arr[Math.floor(Math.random()*arr.length)]; }
+function randDate() {
+  if (Math.random() < 0.15) return null;
+  const d = new Date(); d.setDate(d.getDate() + Math.floor(Math.random()*180));
+  return d.toISOString().slice(0,10);
+}
+function generateTask(i) {
+  const t = {
+    title: `${randFrom(TITLES)} #${i}`,
+    status: weightedRandom(STATUSES, SW),
+    priority: weightedRandom(PRIORITIES, PW),
+  };
+  const desc = randFrom(DESCRIPTIONS);
+  if (desc) t.description = desc;
+  const due = randDate();
+  if (due) t.dueDate = due;
+  const who = randFrom(ASSIGNEES);
+  if (who) t.assignedTo = who;
+  t.category = randFrom(CATEGORIES);
+  return t;
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+let logEl;
+function log(text, type='info') {
+  if (!logEl) logEl = document.getElementById('logBox');
+  const now = new Date().toLocaleTimeString('en-GB',{hour12:false});
+  const el = document.createElement('div');
+  el.className = 'log-entry';
+  el.innerHTML = `<div class="log-time">${now}</div><div class="log-text ${type}">${text}</div>`;
+  logEl.appendChild(el);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function clearLog() { document.getElementById('logBox').innerHTML = ''; }
+function setTool(name, state, status) {
+  const dot = document.getElementById('dot-'+name);
+  const st  = document.getElementById('st-'+name);
+  dot.className = `tool-dot ${state}`;
+  st.textContent = status;
+}
+function setStats(req, ins, fail, total) {
+  document.getElementById('s-requested').textContent = req ?? '—';
+  document.getElementById('s-inserted').textContent  = ins ?? '—';
+  document.getElementById('s-failed').textContent    = fail ?? '—';
+  document.getElementById('s-total').textContent     = total ?? '—';
+}
+function setProgress(pct, label) {
+  document.getElementById('progressFill').style.width = pct+'%';
+  document.getElementById('progressLabel').textContent = label;
+}
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const names = ['log','schema','summary','prompt'];
+    t.classList.toggle('active', names[i]===name);
+  });
+  document.querySelectorAll('.tab-content').forEach(c => {
+    c.classList.toggle('active', c.id === 'tab-'+name);
+  });
+}
+
+// ── Schema renderer ───────────────────────────────────────────────────────────
+function renderSchema(schema) {
+  const props = schema.properties || {};
+  const req   = schema.required || [];
+  let html = '<div class="schema-tree">';
+  html += `<div><span class="sk-key">"title"</span>: <span class="sk-str">"${schema.title}"</span></div>`;
+  html += `<div><span class="sk-key">"required"</span>: <span class="sk-enum">[${req.map(r=>`"${r}"`).join(', ')}]</span> <span class="sk-req">← REQUIRED</span></div>`;
+  html += '<div style="margin-top:12px"><span style="color:var(--muted)">// Fields:</span></div>';
+  for (const [key, val] of Object.entries(props)) {
+    if (key === 'id') continue;
+    const isReq = req.includes(key);
+    const enumVals = val.enum ? ` <span class="sk-enum">[${val.enum.map(e=>`"${e}"`).join(', ')}]</span>` : '';
+    const fmt = val.format ? ` <span style="color:#94a3b8">format:"${val.format}"</span>` : '';
+    html += `<div style="padding-left:20px">`;
+    html += `<span class="sk-key">"${key}"</span>: <span class="sk-type">${val.type}</span>${enumVals}${fmt}`;
+    if (isReq) html += ` <span class="sk-req">REQUIRED</span>`;
+    html += `</div>`;
+  }
+  html += '</div>';
+  document.getElementById('schemaBox').innerHTML = html;
+}
+
+// ── Summary renderer ──────────────────────────────────────────────────────────
+const COLORS = {
+  TODO:'#4f8ef7', IN_PROGRESS:'#f59e0b', DONE:'#22c55e',
+  CANCELLED:'#94a3b8', BLOCKED:'#ef4444',
+  LOW:'#22c55e', MEDIUM:'#4f8ef7', HIGH:'#f59e0b', CRITICAL:'#ef4444',
+};
+function renderBar(label, count, max, color) {
+  const pct = max > 0 ? Math.round((count/max)*100) : 0;
+  return `<div class="bar-row">
+    <div class="bar-label">${label}</div>
+    <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color||'var(--blue)'}">${count}</div></div>
+    <div class="bar-count">${pct}%</div>
+  </div>`;
+}
+function renderSummary(data) {
+  const total = data.totalTasks;
+  let html = `<div style="font-size:28px;font-weight:700;color:var(--green);margin-bottom:4px">${total.toLocaleString()} Tasks</div>`;
+  html += `<div style="font-size:13px;color:var(--muted);margin-bottom:24px">Total in database</div>`;
+  html += '<div class="summary-grid">';
+
+  // Status
+  html += '<div class="chart-card"><div class="chart-title">By Status</div>';
+  const maxS = Math.max(...Object.values(data.byStatus||{}));
+  for (const [k,v] of Object.entries(data.byStatus||{}))
+    html += renderBar(k, v, maxS, COLORS[k]);
+  html += '</div>';
+
+  // Priority
+  html += '<div class="chart-card"><div class="chart-title">By Priority</div>';
+  const maxP = Math.max(...Object.values(data.byPriority||{}));
+  for (const [k,v] of Object.entries(data.byPriority||{}))
+    html += renderBar(k, v, maxP, COLORS[k]);
+  html += '</div>';
+
+  // Category
+  html += '<div class="chart-card"><div class="chart-title">By Category</div>';
+  const maxC = Math.max(...Object.values(data.byCategory||{}));
+  for (const [k,v] of Object.entries(data.byCategory||{}))
+    html += renderBar(k, v, maxC, '#7c3aed');
+  html += '</div>';
+
+  // Assignee
+  html += '<div class="chart-card"><div class="chart-title">By Assignee</div>';
+  const maxA = Math.max(...Object.values(data.byAssignee||{}));
+  for (const [k,v] of Object.entries(data.byAssignee||{}))
+    html += renderBar(k, v, maxA, '#0891b2');
+  html += '</div>';
+
+  html += '</div>';
+  document.getElementById('summaryBox').innerHTML = html;
+}
+
+// ── Main agent ────────────────────────────────────────────────────────────────
+async function runAgent() {
+  const btn      = document.getElementById('runBtn');
+  const base     = document.getElementById('serverUrl').value.replace(/\/$/,'');
+  const count    = parseInt(document.getElementById('taskCount').value) || 1000;
+  const batchSz  = parseInt(document.getElementById('batchSize').value) || 1000;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Running...';
+  clearLog();
+  setStats(null,null,null,null);
+  setProgress(0,'Starting...');
+  ['help','schema','insert','summary'].forEach(n => setTool(n,'','idle'));
+
+  try {
+    // ── STEP 1 — mcp-help ──
+    log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'muted');
+    log('STEP 1 — Calling GET /mcp/help', 'step');
+    setTool('help','run','calling...');
+    setProgress(5, 'Step 1: Discovering tools...');
+
+    const helpRes = await fetch(`${base}/mcp/help`);
+    if (!helpRes.ok) throw new Error(`/mcp/help returned ${helpRes.status}`);
+    const helpData = await helpRes.json();
+    const tools = helpData.data?.tools || [];
+    setTool('help','ok','✓ done');
+    log(`Server: ${helpData.data?.serverName}`, 'success');
+    log(`MCP Version: ${helpData.mcpVersion}`, 'success');
+    log(`Tools discovered: ${tools.map(t=>t.name).join(', ')}`, 'data');
+    setProgress(15, 'Step 1 complete');
+
+    // ── STEP 2 — mcp-schema-tasks ──
+    log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'muted');
+    log('STEP 2 — Calling GET /mcp/schema/tasks', 'step');
+    setTool('schema','run','calling...');
+    setProgress(20, 'Step 2: Inspecting schema...');
+
+    const schemaRes = await fetch(`${base}/mcp/schema/tasks`);
+    if (!schemaRes.ok) throw new Error(`/mcp/schema/tasks returned ${schemaRes.status}`);
+    const schemaData = await schemaRes.json();
+    const schema = schemaData.data?.schema || {};
+    setTool('schema','ok','✓ done');
+    log(`Schema title: ${schema.title}`, 'success');
+    log(`Required fields: [${(schema.required||[]).join(', ')}]`, 'data');
+    log(`Status enum: [${(schema.properties?.status?.enum||[]).join(', ')}]`, 'data');
+    log(`Priority enum: [${(schema.properties?.priority?.enum||[]).join(', ')}]`, 'data');
+    renderSchema(schema);
+    setProgress(30, 'Step 2 complete');
+
+    // ── STEP 3 — Generate tasks ──
+    log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'muted');
+    log(`STEP 3 — Generating ${count} diverse tasks...`, 'step');
+    setProgress(35, `Generating ${count} tasks...`);
+
+    const allTasks = [];
+    for (let i = 1; i <= count; i++) allTasks.push(generateTask(i));
+    log(`Generated ${allTasks.length} tasks`, 'success');
+    log(`Sample: ${JSON.stringify(allTasks[0])}`, 'data');
+    log(`Sample: ${JSON.stringify(allTasks[1])}`, 'data');
+    setProgress(40, 'Generation complete');
+
+    // ── STEP 4 — Insert in batches ──
+    log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'muted');
+    log(`STEP 4 — Posting to /mcp/tasks (batch size: ${batchSz})`, 'step');
+    setTool('insert','run','inserting...');
+
+    let totalInserted = 0, totalFailed = 0, lastTotal = 0;
+    const batches = [];
+    for (let i = 0; i < allTasks.length; i += batchSz)
+      batches.push(allTasks.slice(i, i+batchSz));
+
+    for (let b = 0; b < batches.length; b++) {
+      const batch = batches[b];
+      const pct = 40 + Math.round(((b+1)/batches.length)*45);
+      setProgress(pct, `Inserting batch ${b+1}/${batches.length}...`);
+      log(`  Sending batch ${b+1}/${batches.length} (${batch.length} tasks)...`, 'info');
+
+      const insRes = await fetch(`${base}/mcp/tasks`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(batch),
+      });
+      if (!insRes.ok) throw new Error(`/mcp/tasks returned ${insRes.status}: ${await insRes.text()}`);
+      const insData = await insRes.json();
+      totalInserted += insData.data?.inserted || 0;
+      totalFailed   += insData.data?.failed   || 0;
+      lastTotal      = insData.data?.totalTasksInDb || 0;
+      log(`  Batch ${b+1} result → inserted: ${insData.data?.inserted}, failed: ${insData.data?.failed}`, 'success');
+      setStats(allTasks.length, totalInserted, totalFailed, lastTotal);
+    }
+
+    setTool('insert','ok','✓ done');
+    log(`Total inserted: ${totalInserted} / ${count}`, totalFailed===0?'success':'warn');
+    if (totalFailed > 0) log(`Warning: ${totalFailed} tasks failed to insert`, 'warn');
+    setProgress(88, 'Insert complete');
+
+    // ── STEP 5 — Summary ──
+    log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'muted');
+    log('STEP 5 — Calling GET /mcp/tasks/summary', 'step');
+    setTool('summary','run','calling...');
+    setProgress(92, 'Step 5: Fetching summary...');
+
+    const sumRes = await fetch(`${base}/mcp/tasks/summary`);
+    if (!sumRes.ok) throw new Error(`/mcp/tasks/summary returned ${sumRes.status}`);
+    const sumData = await sumRes.json();
+    const summary = sumData.data;
+    setTool('summary','ok','✓ done');
+
+    log(`Total tasks in DB: ${summary.totalTasks}`, 'success');
+    log('By status: ' + JSON.stringify(summary.byStatus), 'data');
+    log('By priority: ' + JSON.stringify(summary.byPriority), 'data');
+    renderSummary(summary);
+    setStats(count, totalInserted, totalFailed, summary.totalTasks);
+
+    setProgress(100, `✓ Done — ${totalInserted} tasks inserted`);
+    log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'muted');
+    log(`✓ SUCCESS — Agent workflow complete!`, 'success');
+    log(`  Requested: ${count} | Inserted: ${totalInserted} | Failed: ${totalFailed} | Total in DB: ${summary.totalTasks}`, 'success');
+
+    switchTab('summary');
+
+  } catch (err) {
+    log(`✗ ERROR: ${err.message}`, 'error');
+    if (err.message.includes('fetch') || err.message.includes('Failed to fetch')) {
+      log('Cannot reach the MCP server. Is it running on the URL above?', 'warn');
+      log('Check: podman ps  |  podman logs mcp-app', 'warn');
+    }
+    setProgress(0, 'Failed — see log');
+    ['help','schema','insert','summary'].forEach(n => {
+      if (document.getElementById('dot-'+n).classList.contains('run'))
+        setTool(n,'err','error');
+    });
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '▶ Run AI Agent';
+  }
+}
+
+function resetAll() {
+  clearLog();
+  log('Ready. Click "Run AI Agent" to start.', 'muted');
+  setStats(null,null,null,null);
+  setProgress(0,'Not started');
+  ['help','schema','insert','summary'].forEach(n => setTool(n,'','idle'));
+  document.getElementById('schemaBox').innerHTML = 'Schema will appear after the agent runs Step 1.';
+  document.getElementById('summaryBox').innerHTML = 'Summary will appear after the agent inserts tasks.';
+  switchTab('log');
+}
+</script>
+</body>
+</html>
