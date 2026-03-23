@@ -106,6 +106,7 @@ pip install requests
 python3 agent_test.py
 ```
 ![alt text](image.png)
+
 You should see 1 000 tasks inserted with `✓ SUCCESS` at the end.
 
 ---
